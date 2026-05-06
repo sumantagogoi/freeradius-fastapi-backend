@@ -1,2 +1,2 @@
 from .freeradius import RadCheck, RadReply, RadUserGroup, Nas
-from .admin import AdminUser
+from .admin import AdminUser, UserMeta

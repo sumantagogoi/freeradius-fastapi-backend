@@ -53,6 +53,37 @@ class RadCheckUpdate(BaseModel):
     value: Optional[str] = None
 
 
+# --- User metadata (unified) ---
+class UserCreate(BaseModel):
+    username: str
+    password: str
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class UserUpdate(BaseModel):
+    password: Optional[str] = None
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class UserOut(BaseModel):
+    id: int
+    username: str
+    password: str
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    notes: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
 # --- FreeRADIUS radreply ---
 class RadReplyCreate(BaseModel):
     username: str
