@@ -240,3 +240,18 @@ Certbot renews automatically, but the deploy hook must be verified after each ma
 | `/etc/letsencrypt/` | Certbot deploy hook for auto-renewal |
 
 Users, groups, and passwords are managed entirely via the FastAPI backend — no config file edits needed for day-to-day operations.
+
+---
+
+## Custom DB Extensions
+
+This backend adds a `nasidentifier` column to the standard `radacct` FreeRADIUS table.
+It captures the MikroTik's NAS-Identifier (typically the bridge MAC) for each session,
+allowing you to identify which NAS device served a user without relying solely on the IP.
+
+### Adding to an existing database
+```sql
+ALTER TABLE radacct ADD COLUMN nasidentifier TEXT;
+```
+
+The API handles both schemas gracefully — queries work with or without the column.

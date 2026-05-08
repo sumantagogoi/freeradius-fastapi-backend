@@ -5,23 +5,26 @@ from sqlalchemy.orm import Session
 from ..database import get_radius_db, get_admin_db
 from ..models.freeradius import RadCheck, RadReply, RadUserGroup
 from ..models.admin import AdminUser, UserMeta
-from ..schemas import RadCheckCreate, RadCheckOut, RadCheckUpdate, RadReplyCreate, RadReplyOut, UserCreate, UserUpdate, UserOut
+from ..schemas import (
+    RadCheckCreate, RadCheckOut, RadCheckUpdate,
+    RadReplyCreate, RadReplyOut, RadReplyUpdate,
+    UserCreate, UserUpdate, UserOut,
+)
 from ..dependencies import get_current_user
 
 router = APIRouter(prefix="/radius", tags=["radius"], dependencies=[Depends(get_current_user)])
 
 
-# ── radcheck ──────────────────────────────────────────────
+# ── radcheck (user/password entries) ───────────────────
 
 @router.get("/users", response_model=List[RadCheckOut])
 def list_radius_users(
     username: Optional[str] = Query(None),
-    all: Optional[bool] = Query(False),
+    all_attrs: Optional[bool] = Query(False, alias="all"),
     db: Session = Depends(get_radius_db),
-    _: AdminUser = Depends(get_current_user),
 ):
     q = db.query(RadCheck)
-    if not all:
+    if not all_attrs:
         q = q.filter(RadCheck.attribute == "Cleartext-Password")
     if username:
         q = q.filter(RadCheck.username.ilike(f"%{username}%"))
@@ -29,11 +32,7 @@ def list_radius_users(
 
 
 @router.post("/users", response_model=RadCheckOut, status_code=status.HTTP_201_CREATED)
-def create_radius_user(
-    body: RadCheckCreate,
-    db: Session = Depends(get_radius_db),
-    _: AdminUser = Depends(get_current_user),
-):
+def create_radius_user(body: RadCheckCreate, db: Session = Depends(get_radius_db)):
     existing = (
         db.query(RadCheck)
         .filter(RadCheck.username == body.username, RadCheck.attribute == body.attribute)
@@ -49,12 +48,7 @@ def create_radius_user(
 
 
 @router.put("/users/{entry_id}", response_model=RadCheckOut)
-def update_radius_user(
-    entry_id: int,
-    body: RadCheckUpdate,
-    db: Session = Depends(get_radius_db),
-    _: AdminUser = Depends(get_current_user),
-):
+def update_radius_user(entry_id: int, body: RadCheckUpdate, db: Session = Depends(get_radius_db)):
     entry = db.query(RadCheck).filter(RadCheck.id == entry_id).first()
     if not entry:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entry not found")
@@ -67,11 +61,7 @@ def update_radius_user(
 
 
 @router.delete("/users/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_radius_user(
-    entry_id: int,
-    db: Session = Depends(get_radius_db),
-    _: AdminUser = Depends(get_current_user),
-):
+def delete_radius_user(entry_id: int, db: Session = Depends(get_radius_db)):
     entry = db.query(RadCheck).filter(RadCheck.id == entry_id).first()
     if not entry:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entry not found")
@@ -79,26 +69,24 @@ def delete_radius_user(
     db.commit()
 
 
-# ── radreply ──────────────────────────────────────────────
+# ── radreply (generic attributes/values) ───────────────
 
 @router.get("/replies", response_model=List[RadReplyOut])
 def list_replies(
     username: Optional[str] = Query(None),
+    attribute: Optional[str] = Query(None, description="Filter by attribute name (e.g. Framed-IP-Address)"),
     db: Session = Depends(get_radius_db),
-    _: AdminUser = Depends(get_current_user),
 ):
     q = db.query(RadReply)
     if username:
         q = q.filter(RadReply.username == username)
-    return q.order_by(RadReply.username).all()
+    if attribute:
+        q = q.filter(RadReply.attribute == attribute)
+    return q.order_by(RadReply.username, RadReply.attribute).all()
 
 
 @router.post("/replies", response_model=RadReplyOut, status_code=status.HTTP_201_CREATED)
-def create_reply(
-    body: RadReplyCreate,
-    db: Session = Depends(get_radius_db),
-    _: AdminUser = Depends(get_current_user),
-):
+def create_reply(body: RadReplyCreate, db: Session = Depends(get_radius_db)):
     entry = RadReply(**body.model_dump())
     db.add(entry)
     db.commit()
@@ -106,27 +94,35 @@ def create_reply(
     return entry
 
 
-@router.delete("/replies/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_reply(
-    entry_id: int,
-    db: Session = Depends(get_radius_db),
-    _: AdminUser = Depends(get_current_user),
-):
+@router.put("/replies/{entry_id}", response_model=RadReplyOut)
+def update_reply(entry_id: int, body: RadReplyUpdate, db: Session = Depends(get_radius_db)):
     entry = db.query(RadReply).filter(RadReply.id == entry_id).first()
     if not entry:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entry not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reply not found")
+    updates = body.model_dump(exclude_unset=True)
+    for k, v in updates.items():
+        setattr(entry, k, v)
+    db.commit()
+    db.refresh(entry)
+    return entry
+
+
+@router.delete("/replies/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_reply(entry_id: int, db: Session = Depends(get_radius_db)):
+    entry = db.query(RadReply).filter(RadReply.id == entry_id).first()
+    if not entry:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reply not found")
     db.delete(entry)
     db.commit()
 
 
-# ── Unified user management (user + metadata) ────────────
+# ── Unified user management (user + metadata) ──────────
 
 @router.get("/users/with-meta", response_model=List[UserOut])
 def list_users_with_meta(
     username: Optional[str] = Query(None),
     radius_db: Session = Depends(get_radius_db),
     admin_db: Session = Depends(get_admin_db),
-    _: AdminUser = Depends(get_current_user),
 ):
     q = radius_db.query(RadCheck).filter(RadCheck.attribute == "Cleartext-Password")
     if username:
@@ -153,9 +149,7 @@ def create_user_with_meta(
     body: UserCreate,
     radius_db: Session = Depends(get_radius_db),
     admin_db: Session = Depends(get_admin_db),
-    _: AdminUser = Depends(get_current_user),
 ):
-    # Check for existing
     existing = (
         radius_db.query(RadCheck)
         .filter(RadCheck.username == body.username, RadCheck.attribute == "Cleartext-Password")
@@ -164,12 +158,10 @@ def create_user_with_meta(
     if existing:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User already exists")
 
-    # Create radcheck entry
     rad_entry = RadCheck(username=body.username, attribute="Cleartext-Password", op=":=", value=body.password)
     radius_db.add(rad_entry)
     radius_db.flush()
 
-    # Create/update metadata
     meta = admin_db.query(UserMeta).filter(UserMeta.username == body.username).first()
     if not meta:
         meta = UserMeta(username=body.username)
@@ -181,7 +173,6 @@ def create_user_with_meta(
         meta.phone = body.phone
     if body.notes is not None:
         meta.notes = body.notes
-
     if not meta.id:
         admin_db.add(meta)
 
@@ -200,12 +191,7 @@ def create_user_with_meta(
 
 
 @router.get("/users/with-meta/{username}", response_model=UserOut)
-def get_user_with_meta(
-    username: str,
-    radius_db: Session = Depends(get_radius_db),
-    admin_db: Session = Depends(get_admin_db),
-    _: AdminUser = Depends(get_current_user),
-):
+def get_user_with_meta(username: str, radius_db: Session = Depends(get_radius_db), admin_db: Session = Depends(get_admin_db)):
     rad_entry = (
         radius_db.query(RadCheck)
         .filter(RadCheck.username == username, RadCheck.attribute == "Cleartext-Password")
@@ -232,7 +218,6 @@ def update_user_with_meta(
     body: UserUpdate,
     radius_db: Session = Depends(get_radius_db),
     admin_db: Session = Depends(get_admin_db),
-    _: AdminUser = Depends(get_current_user),
 ):
     rad_entry = (
         radius_db.query(RadCheck)
@@ -278,7 +263,6 @@ def delete_user_with_meta(
     username: str,
     radius_db: Session = Depends(get_radius_db),
     admin_db: Session = Depends(get_admin_db),
-    _: AdminUser = Depends(get_current_user),
 ):
     rad_entries = radius_db.query(RadCheck).filter(RadCheck.username == username).all()
     if not rad_entries:
