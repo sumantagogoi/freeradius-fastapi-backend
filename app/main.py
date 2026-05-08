@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .database import admin_engine, AdminBase
-from .routers import auth, users, bandwidth, static_ips, nas, group_mgmt, accounting, auth_logs
+from .routers import auth, users, bandwidth, static_ips, nas, group_mgmt, accounting, auth_logs, disconnect
 
 AdminBase.metadata.create_all(bind=admin_engine)
 
@@ -27,6 +27,7 @@ app.include_router(nas.router)
 app.include_router(group_mgmt.router)
 app.include_router(accounting.router)
 app.include_router(auth_logs.router)
+app.include_router(disconnect.router)
 
 
 @app.get("/health")

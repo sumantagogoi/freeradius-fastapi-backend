@@ -241,17 +241,18 @@ Certbot renews automatically, but the deploy hook must be verified after each ma
 
 Users, groups, and passwords are managed entirely via the FastAPI backend — no config file edits needed for day-to-day operations.
 
+
+
 ---
 
-## Custom DB Extensions
+## Mandatory DB Extension — `nasidentifier`
 
-This backend adds a `nasidentifier` column to the standard `radacct` FreeRADIUS table.
-It captures the MikroTik's NAS-Identifier (typically the bridge MAC) for each session,
-allowing you to identify which NAS device served a user without relying solely on the IP.
+Every project using this codebase **must** add the `nasidentifier` column to `radacct`:
 
-### Adding to an existing database
 ```sql
 ALTER TABLE radacct ADD COLUMN nasidentifier TEXT;
 ```
 
-The API handles both schemas gracefully — queries work with or without the column.
+Even if your NAS is not MikroTik, an extra nullable text column hurts nothing.
+The API handles both schemas gracefully — but having the column unlocks NAS identity
+tracking for every session without relying on IP-based lookups.

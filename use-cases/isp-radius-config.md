@@ -214,3 +214,18 @@ rx-rate/tx-rate rx-burst-rate/tx-burst-rate rx-burst-threshold/tx-burst-threshol
 
 The API's `/radius/bandwidth/{username}` endpoint accepts only the base rate to keep it simple.
 If you need burst, set it manually via the raw `/radius/replies` endpoint.
+
+
+---
+
+## Mandatory DB Extension — `nasidentifier`
+
+Every project using this codebase **must** add the `nasidentifier` column to `radacct`:
+
+```sql
+ALTER TABLE radacct ADD COLUMN nasidentifier TEXT;
+```
+
+Even if your NAS is not MikroTik, an extra nullable text column hurts nothing.
+The API handles both schemas gracefully — but having the column unlocks NAS identity
+tracking for every session without relying on IP-based lookups.
