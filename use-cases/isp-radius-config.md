@@ -190,3 +190,27 @@ For multiple RADIUS instances, clone the backend, change `.env` → `DATABASE_UR
 | `sites-available/inner-tunnel` | Change `port = 18120` → custom port |
 
 Everything else — NAS list, users, attributes, groups — is pure database data, no config changes needed.
+
+---
+
+## MikroTik Bandwidth Profiles — Important
+
+When setting `Mikrotik-Rate-Limit`, only set the **rx-rate/tx-rate** (down/up):
+
+```
+10M/20M       ✅ Works — 10 Mbps down, 20 Mbps up
+```
+
+Do **not** include burst parameters unless explicitly needed:
+
+```
+10M/20M 1M/1M 8 4    ❌ MikroTik rejects this
+```
+
+The correct full format is:
+```
+rx-rate/tx-rate rx-burst-rate/tx-burst-rate rx-burst-threshold/tx-burst-threshold rx-burst-time/tx-burst-time priority rx-min-rate/tx-min-rate
+```
+
+The API's `/radius/bandwidth/{username}` endpoint accepts only the base rate to keep it simple.
+If you need burst, set it manually via the raw `/radius/replies` endpoint.
